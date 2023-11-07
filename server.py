@@ -5,7 +5,7 @@ import socket
 # String -> Tuple"
 
 HOST = "127.0.0.1"
-PORT = 10001
+PORT = 10002
 
 DNS_table = {
     "google.com": ["A", "IN", 260, ["192.165.1.1", "192.165.1.10"]],
@@ -17,61 +17,68 @@ DNS_table = {
 
 
 
-def get_url(request_payload_name):
+def get_url(request_payload_name: bytearray):
     # parse the octal request to get a string
+    
     index = 0
     url_name = ""
     while True:
-        
+        # get the byte
         label_length = request_payload_name[index]
         index += 1
-        if( int(label_length, 8) == 0):
+        if(label_length == 0):
             break
         for i in range(label_length):
-            url_name += chr(int(request_payload_name[index], 8))
+            # get the byte
+            char = request_payload_name[index]
+            # use the integer as the ascii value of the char
+            url_name += chr(char)
             index += 1
         # if the next character is a null label then break
         if(request_payload_name[index] == 0):
-            break;
+            return url_name
         # otherwise add a dot
         else:
             url_name += "."
     return url_name
 
-def getDNSHeader(request_message):
+def getDNSHeader(request_message: bytearray, url):
     # id is first 16 bits
     request_id = request_message[0:2]
     DNS_response_header = request_id
     # hardcode the flags since these are all given beforehand
     FLAGS = 0b1000010000000000
-    FLAGS = bytes(FLAGS)
-    DNS_response_header.append(FLAGS)
+    DNS_response_header.extend((FLAGS).to_bytes(2, 'big'))
     
     #QDCOUNT
 
-    DNS_response_header.append(bytes(0x0001))
+    DNS_response_header.extend((0x0001).to_bytes(2, 'big'))
     
     #ANCOUNT
+    # this changes based on how many resources
     
-    DNS_response_header.append(bytes(0x0001))
+    DNS_response_header.extend((len(DNS_table[url][3])).to_bytes(2, 'big'))
     
     #NSCOUNT
     
-    DNS_response_header.append(bytes(0x0000))
+    DNS_response_header.extend((0x0000).to_bytes(2, 'big'))
     
     #ARCOUNT
     
-    DNS_response_header.append(bytes(0x0000))
+    DNS_response_header.extend((0x0000).to_bytes(2, 'big'))
     return DNS_response_header
 
-def getDNSBody(request_message):
-           
-    # unpack question
-    request_payload = request_message[10:]
+def getDNSBodies(request_message):
+    # Create a DNS answer
     
+    DNS_response_bodies = []
+   
+    # unpack question
+    request_payload = request_message[12:]
+
     # remove the QType and QClass or the last 4 bytes
     request_payload_name = request_payload[:-4]
-    
+
     
     url = get_url(request_payload_name)
     
@@ -83,40 +90,44 @@ def getDNSBody(request_message):
     
     # NAME
     
-    DNS_response_body.append(bytes(0xc00c))
+    DNS_response_body.extend((0xc00c).to_bytes(2, 'big'))
     
     # TYPE
     
-    DNS_response_body.append(bytes(0x0001))
+    DNS_response_body.extend((0x0001).to_bytes(2, 'big'))
     
     # CLASS
     
-    DNS_response_body.append(bytes(0x0001))
+    DNS_response_body.extend((0x0001).to_bytes(2, 'big'))
     
     # TTL
     
-    DNS_response_body.append(bytes(DNS_records[2]))
+    DNS_response_body.extend((DNS_records[2]).to_bytes(4, 'big'))
     
     
     # RDLENGTH
-    # we know the rdlength as 4 * #of ip_addresses and convert it to oct
-    # pad with zfill in case not enough zeroes
-    # finally turn it into a byte form so it can be added to the byte array
+    # we know the rdlength as 4 
     
-    DNS_response_body.append(bytes(oct((DNS_records[3].size() * 4)).zfill(4)))
+    DNS_response_body.extend((0x0004).to_bytes(2, 'big'))
     
-    for ip_address in DNS_records[3]:
+    for i in range(len(DNS_records[3])):
+        DNS_response_bodies.append(DNS_response_body.copy())
+    
+    for i in range(len(DNS_records[3])):
+        byte_ip_address = bytearray()
         # RDATA
-        ip_address_array = ip_address.split('.')
-        
+        ip_address_array = DNS_records[3][i].split('.')
+       
         for string in ip_address_array:
             #add each portion of the ip address as an octal
-            DNS_response_body.append(bytes(int(string, 8)))
-            
-        
-        
-        
-    return DNS_response_body
+            byte_ip_address.extend((int(string)).to_bytes(1, 'big'))
+       
+    
+        DNS_response_bodies[i].extend(byte_ip_address)
+    
+           
+
+    return DNS_response_bodies, url
     
 
 if __name__ == "__main__":
@@ -126,26 +137,38 @@ if __name__ == "__main__":
         print("server is listening for a connection on", PORT)
         s.listen()
         conn, addr = s.accept()
+        
         print("accepted a connection")
-        with conn:
+        while True:
             
+                
             request_message = bytearray()
-            while True:
-                data = conn.recv(1024)
-                if not data:
-                    break
-                request_message.append(bytearray(data))
+            
+            data = conn.recv(1024)
+            
+            
+            request_message.extend(data)
             # received message and parse the request message
             print("parsing message data")
-            DNS_response_header = getDNSHeader(request_message)
-            DNS_response_body = getDNSBody(request_message)
+            
+            DNS_response_bodies, url = getDNSBodies(request_message)
+            DNS_response_header = getDNSHeader(request_message, url)
         
-           
-            print(request_message)
-            response_message = DNS_response_header + DNS_response_body
-            print(response_message)
+        
+            print("\n request message: \n", " ".join(hex(b) for b in request_message))
+            # header
+            response_message = DNS_response_header
+            # question
+            DNS_request_question =  request_message[12:]
+            response_message += DNS_request_question
+            # answer(s)
+            for DNS_response_body in DNS_response_bodies:
+                response_message += DNS_response_body
+            
+            print("\n response message: \n", " ".join(hex(b) for b in response_message))
             # send back response
-         
+        
             conn.sendall(response_message)
             print("done sending message to client")
- 
+        
+    
