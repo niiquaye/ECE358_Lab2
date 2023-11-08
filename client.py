@@ -112,9 +112,10 @@ def parseAnswers(number_of_answers : int, response_answers : bytearray):
 
 if __name__ == "__main__":
     
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         print("client is waiting for server to open")
         s.connect((HOST, PORT))
+        s.send(bytearray(1))
         print("connected to server")
         while True:
             DNS_url = input("Enter Domain Name: ")

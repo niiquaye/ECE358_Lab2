@@ -82,7 +82,7 @@ def getDNSBodies(request_message):
     
     url = get_url(request_payload_name)
     
-    DNS_records = DNS_table[url]
+    DNS_records = DNS_table[url.lower()]
 
     # generate response body
                 
@@ -131,20 +131,18 @@ def getDNSBodies(request_message):
     
 
 if __name__ == "__main__":
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.bind((HOST, PORT))
-       
-        print("server is listening for a connection on", PORT)
-        s.listen()
-        conn, addr = s.accept()
+        print("waiting for a client")
+        client = s.recvfrom(1)
+        client_address = client[1]
         
-        print("accepted a connection")
+        print("client remembered")
         while True:
             
-                
             request_message = bytearray()
-            
-            data = conn.recv(1024)
+            print("waiting to receive data from client")
+            data = s.recv(1024)
             
             
             request_message.extend(data)
@@ -168,7 +166,7 @@ if __name__ == "__main__":
             print("\n response message: \n", " ".join(hex(b) for b in response_message))
             # send back response
         
-            conn.sendall(response_message)
+            s.sendto(response_message, client_address)
             print("done sending message to client")
         
     
