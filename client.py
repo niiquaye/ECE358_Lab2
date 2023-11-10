@@ -110,6 +110,7 @@ def parseAnswers(number_of_answers : int, response_answers : bytearray):
         results.append(result)
     return results
 
+# main body
 if __name__ == "__main__":
     
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
