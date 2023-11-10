@@ -1,7 +1,7 @@
 import socket
 import os
 
-HOST = "127.0.0.1"
+SERVER_IP = "127.0.0.1"
 PORT = 10002
 
 def makeDNSHeader():
@@ -67,7 +67,7 @@ def parseAnswers(number_of_answers : int, response_answers : bytearray):
     for i in range(number_of_answers):
         result = {} 
         # Skip over the first two bytes since it's the name
-        # Since it's assumed that name is 2 bytes long
+        # Since it's assumed that name is 2 bytes long and constant
         index += 2
      
         # type is bytes 2 and 3 in the answer
@@ -113,10 +113,6 @@ def parseAnswers(number_of_answers : int, response_answers : bytearray):
 if __name__ == "__main__":
     
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        print("client is waiting for server to open")
-        s.connect((HOST, PORT))
-        s.send(bytearray(1))
-        print("connected to server")
         while True:
             DNS_url = input("Enter Domain Name: ")
             if(DNS_url == "end"):
@@ -132,9 +128,9 @@ if __name__ == "__main__":
             print("client is sending DNS message")
             DNS_request_header.extend(DNS_request_body)
             request = DNS_request_header
-            s.sendall(request)
+            s.sendto(request, (SERVER_IP, PORT))
             print("client is waiting for response")
-            response = s.recv(2048)
+            response, server = s.recvfrom(2048)
             results = parseData(request, response)
             print(results)
             for result in results:
